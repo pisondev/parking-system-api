@@ -4,30 +4,41 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
+	"github.com/pisondev/parking-system-api/app"
+	"github.com/pisondev/parking-system-api/controller"
+	"github.com/pisondev/parking-system-api/exception"
+	"github.com/pisondev/parking-system-api/repository"
+	"github.com/pisondev/parking-system-api/service"
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	log := logrus.New()
-	log.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
+	log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Warn(".env file is not found")
-	} else {
-		log.Info("success load .env config")
+	if err := godotenv.Load(); err != nil {
+		log.Warn("no .env file found")
 	}
 
-	app := fiber.New()
+	db := app.NewDB(log)
+	validate := validator.New()
 
-	app.Get("/", func(c *fiber.Ctx) error {
+	parkingRepo := repository.NewParkingRepository()
+	parkingService := service.NewParkingService(parkingRepo, db)
+	parkingController := controller.NewParkingController(parkingService, validate)
+
+	fiberApp := fiber.New(fiber.Config{
+		ErrorHandler: exception.ErrorHandler,
+	})
+
+	app.SetupRouter(fiberApp, parkingController)
+
+	fiberApp.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"message": "Welcome to Mall Parking System API!",
-			"status":  "Server is running",
+			"message": "Mall Parking System API is running",
 		})
 	})
 
@@ -37,9 +48,9 @@ func main() {
 	}
 
 	listenAddr := fmt.Sprintf(":%s", appPort)
-	log.Infof("Server starting on port %s...", appPort)
+	log.Infof("server starting on port %s...", appPort)
 
-	if err := app.Listen(listenAddr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	if err := fiberApp.Listen(listenAddr); err != nil {
+		log.Fatalf("failed to start server: %v", err)
 	}
 }
